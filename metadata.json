@@ -1,0 +1,8 @@
+{
+  "name": "Remix VerifyFirst AI",
+  "description": "An Evidence-Gated AI Agent powered by NVIDIA Nemotron and Nebius Token Factory. Generates privately, verifies independently, corrects when necessary, and releases only what evidence supports.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
