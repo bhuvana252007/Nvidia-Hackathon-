@@ -122,6 +122,45 @@ export interface PipelineMetrics {
   provider: string;
 }
 
+export interface AttachedFile {
+  name: string;
+  type: string;
+  size?: number;
+  dataUrl?: string;
+  textContent?: string;
+}
+
+export interface TrustScoreBreakdown {
+  formula: string;
+  verifiedWeight: number;
+  likelyWeight: number;
+  uncertainWeight: number;
+  correctedWeight: number;
+  totalClaims: number;
+  rawScore: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  attachedFile?: AttachedFile;
+  verificationResult?: VerificationResult;
+  isStreaming?: boolean;
+  statusLine?: string;
+  durationSeconds?: number;
+  mode?: 'fast' | 'deep';
+}
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: ChatMessage[];
+}
+
 export interface VerificationResult {
   queryId: string;
   query: string;
@@ -132,6 +171,8 @@ export interface VerificationResult {
   hasAbstained: boolean;
   abstentionReason?: string;
   trustScore: number;
+  trustScoreLabel?: 'Highly reliable' | 'Mostly reliable' | 'Check this yourself';
+  trustScoreBreakdown?: TrustScoreBreakdown;
   medicalLegalWarning?: string;
   claims: Claim[];
   evidenceSources: EvidenceSource[];
@@ -145,6 +186,27 @@ export interface VerificationResult {
     correctedCount: number;
     abstainedCount: number;
     unresolvedConflicts: string[];
+  };
+  codeExecution?: {
+    language: 'python' | 'javascript';
+    success: boolean;
+    stdout: string;
+    stderr?: string;
+    executionTimeMs: number;
+  };
+  mathVerification?: {
+    isMath: boolean;
+    expression?: string;
+    expectedResult?: string;
+    isCorrect?: boolean;
+    stepDetails?: string[];
+    explanation?: string;
+  };
+  contradictionCorrection?: string;
+  pdfCitations?: {
+    fileName: string;
+    totalPages: number;
+    citedPages: number[];
   };
 }
 

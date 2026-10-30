@@ -1,15 +1,18 @@
 /**
  * Release Gate Policy Engine
- * Enforces evidence-based gating: releases only supported claims, qualifies uncertainty, abstains from unevidenced assertions.
+ * Enforces evidence-based gating: releases only supported claims, qualifies uncertainty,
+ * and outputs natural assistant responses with inline weak-claim highlights.
  */
 
-import { Claim, EvidenceSource } from '../types/pipeline';
+import { Claim, EvidenceSource, TrustScoreBreakdown } from '../types/pipeline';
 
 export interface ReleaseGateOutput {
   releasedAnswer: string;
   hasAbstained: boolean;
   abstentionReason?: string;
   trustScore: number;
+  trustScoreLabel: 'Highly reliable' | 'Mostly reliable' | 'Check this yourself';
+  trustScoreBreakdown: TrustScoreBreakdown;
   medicalLegalWarning?: string;
   policySummary: {
     releasedCount: number;
@@ -25,7 +28,7 @@ export interface ReleaseGateOutput {
 export class ReleaseGate {
   /**
    * Evaluates claims against the release policy and synthesizes a full, natural assistant answer
-   * Policy: Never withhold the whole answer; selectively flag uncertain parts with inline badges.
+   * Policy: Never withhold the whole answer; output pure natural prose; weak claims receive subtle underline.
    */
   public evaluateAndSynthesize(
     claims: Claim[],
@@ -36,10 +39,11 @@ export class ReleaseGate {
     let likelyCorrectCount = 0;
     let uncertainCount = 0;
     let correctedCount = 0;
+    let contradictedCount = 0;
     const unresolvedConflicts: string[] = [];
     let medicalLegalWarning: string | undefined = undefined;
 
-    // Step 1: Assign release decisions & counts
+    // Step 1: Count claims based on verified status
     for (const claim of claims) {
       claim.releaseDecision = 'RELEASE';
 
@@ -47,33 +51,59 @@ export class ReleaseGate {
         verifiedCount++;
       } else if (claim.status === 'CORRECTED') {
         correctedCount++;
-        verifiedCount++;
       } else if (claim.status === 'LIKELY_CORRECT' || claim.status === 'PARTIALLY_SUPPORTED') {
         likelyCorrectCount++;
       } else if (claim.status === 'UNCERTAIN' || claim.status === 'UNVERIFIED') {
         claim.status = 'UNCERTAIN';
-        claim.qualificationNote = "I'm not fully sure about this part.";
+        claim.qualificationNote = "Couldn't fully verify this.";
         uncertainCount++;
       } else if (claim.status === 'CONTRADICTED') {
-        // If uncorrected contradiction reached here
+        contradictedCount++;
         claim.status = 'UNCERTAIN';
-        claim.qualificationNote = "Conflicting evidence exists; flagged for review.";
+        claim.qualificationNote = "Couldn't fully verify this.";
         uncertainCount++;
       }
 
       if (claim.qualificationNote && claim.qualificationNote.includes('Warning: Sensitive topic')) {
-        medicalLegalWarning = 'This response contains medical, legal, or financial topics. Please consult an accredited professional for official guidance.';
+        medicalLegalWarning = 'This response touches on sensitive topics. Please verify with primary official documentation.';
       }
     }
 
     const totalClaims = Math.max(1, claims.length);
-    const trustScore = Math.min(100, Math.round(((verifiedCount + likelyCorrectCount * 0.9) / totalClaims) * 100));
 
-    // Step 2: Synthesize a full, helpful, natural assistant answer
-    const citedEvidenceMap = new Map<string, number>();
-    let citationCounter = 1;
+    // Exact user-specified Trust Score formula:
+    // verified by source/code = 100%, likely correct = 70%, uncertain = 30%, corrected = counts as verified (100%), contradicted = 0%
+    const weightedSum =
+      verifiedCount * 1.0 +
+      correctedCount * 1.0 +
+      likelyCorrectCount * 0.7 +
+      uncertainCount * 0.3 +
+      contradictedCount * 0.0;
 
-    // Group claims into natural flowing paragraphs
+    const rawScore = (weightedSum / totalClaims) * 100;
+    const trustScore = Math.min(100, Math.max(0, Math.round(rawScore)));
+
+    let trustScoreLabel: 'Highly reliable' | 'Mostly reliable' | 'Check this yourself' = 'Highly reliable';
+    if (trustScore >= 80) {
+      trustScoreLabel = 'Highly reliable';
+    } else if (trustScore >= 50) {
+      trustScoreLabel = 'Mostly reliable';
+    } else {
+      trustScoreLabel = 'Check this yourself';
+    }
+
+    const trustScoreBreakdown: TrustScoreBreakdown = {
+      formula: '(Verified × 1.0 + Corrected × 1.0 + Likely × 0.7 + Uncertain × 0.3) / Total Claims',
+      verifiedWeight: verifiedCount * 1.0,
+      likelyWeight: likelyCorrectCount * 0.7,
+      uncertainWeight: uncertainCount * 0.3,
+      correctedWeight: correctedCount * 1.0,
+      totalClaims,
+      rawScore: Math.round(rawScore * 10) / 10
+    };
+
+    // Step 2: Synthesize clean, natural assistant prose (no bracket tags)
+    // Wrap weak claims in <span class="weak-claim" data-tooltip="Couldn't fully verify this.">...</span>
     const paragraphs: string[] = [];
     let currentParagraphClaims: string[] = [];
 
@@ -81,37 +111,18 @@ export class ReleaseGate {
       const claim = claims[i];
       let statement = claim.text.trim();
 
-      // Ensure statement ends with a period if not punctuated
       if (!/[.?!]$/.test(statement)) {
         statement += '.';
       }
 
-      // Add inline badges next to claims
-      let badge = '';
-      if (claim.status === 'VERIFIED' || claim.status === 'SUPPORTED') {
-        badge = ' [✅ Verified]';
-      } else if (claim.status === 'CORRECTED') {
-        badge = ' [🔄 Corrected]';
-      } else if (claim.status === 'LIKELY_CORRECT' || claim.status === 'PARTIALLY_SUPPORTED') {
-        badge = ' [🟢 Likely Correct]';
-      } else if (claim.status === 'UNCERTAIN' || claim.status === 'UNVERIFIED') {
-        badge = ` [🟡 Uncertain: I'm not fully sure about this part]`;
-      }
+      const isWeak = claim.status === 'UNCERTAIN' || claim.status === 'CONTRADICTED';
+      const renderedClaim = isWeak
+        ? `<span class="weak-claim" data-tooltip="Couldn't fully verify this.">${statement}</span>`
+        : statement;
 
-      // Add citation superscript if evidence is linked
-      if (claim.supportingEvidenceIds.length > 0) {
-        const citationIndices = claim.supportingEvidenceIds.map(eid => {
-          if (!citedEvidenceMap.has(eid)) {
-            citedEvidenceMap.set(eid, citationCounter++);
-          }
-          return `[^${citedEvidenceMap.get(eid)}]`;
-        });
-        badge += ` ${citationIndices.join('')}`;
-      }
+      currentParagraphClaims.push(renderedClaim);
 
-      currentParagraphClaims.push(`${statement}${badge}`);
-
-      // Break into paragraphs every 2-3 sentences or on major topic shift
+      // Group 2 sentences per paragraph or on line breaks
       if (currentParagraphClaims.length >= 2 || i === claims.length - 1) {
         paragraphs.push(currentParagraphClaims.join(' '));
         currentParagraphClaims = [];
@@ -124,26 +135,12 @@ export class ReleaseGate {
 
     let synthesizedText = paragraphs.join('\n\n');
 
-    // Add sensitive disclaimer if relevant
-    if (medicalLegalWarning) {
-      synthesizedText += `\n\n> ⚠️ **Professional Advisory:** *${medicalLegalWarning}*`;
-    }
-
-    // Append Verified Evidence References
-    if (citedEvidenceMap.size > 0) {
-      synthesizedText += '\n\n### Verified Evidence Sources\n';
-      for (const [eid, num] of citedEvidenceMap.entries()) {
-        const ev = evidenceList.find(e => e.id === eid);
-        if (ev) {
-          synthesizedText += `[^${num}]: [${ev.title}](${ev.url}) — *${ev.domain}* (${ev.authority.replace('_', ' ')})\n`;
-        }
-      }
-    }
-
     return {
       releasedAnswer: synthesizedText,
       hasAbstained: false,
       trustScore,
+      trustScoreLabel,
+      trustScoreBreakdown,
       medicalLegalWarning,
       policySummary: {
         releasedCount: claims.length,

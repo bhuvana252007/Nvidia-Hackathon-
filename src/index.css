@@ -2,14 +2,117 @@
 
 @layer base {
   body {
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-    background-color: #020617; /* slate-950 */
-    color: #f8fafc; /* slate-50 */
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: #0B0F12;
+    color: #EDEDED;
     overflow-x: hidden;
   }
 
   code, pre, .font-mono {
     font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+}
+
+/* Weak claims subtle yellow underline */
+.weak-claim {
+  border-bottom: 2px dashed rgba(234, 179, 8, 0.85);
+  background-color: rgba(234, 179, 8, 0.08);
+  padding: 1px 3px;
+  border-radius: 3px;
+  cursor: help;
+  position: relative;
+  display: inline;
+  transition: all 0.2s ease;
+}
+
+.weak-claim:hover {
+  background-color: rgba(234, 179, 8, 0.18);
+  border-bottom-color: #facc15;
+}
+
+.weak-claim::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #0f172a;
+  color: #fef08a;
+  border: 1px solid rgba(234, 179, 8, 0.4);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.3;
+  padding: 5px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 50;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.6), 0 0 1px 1px rgba(234, 179, 8, 0.2);
+}
+
+.weak-claim:hover::after {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(-2px);
+}
+
+/* Light Theme Support */
+html.light-theme body {
+  background-color: #F8FAFC !important;
+  color: #0F172A !important;
+}
+
+html.light-theme aside,
+html.light-theme header,
+html.light-theme main,
+html.light-theme .bg-\[\#0B0F12\],
+html.light-theme .bg-\[\#090D10\],
+html.light-theme .bg-\[\#0F1418\],
+html.light-theme .bg-\[\#12181D\],
+html.light-theme .bg-\[\#141A1F\],
+html.light-theme .bg-\[\#1A2229\] {
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+  border-color: #E2E8F0 !important;
+}
+
+html.light-theme .text-slate-100,
+html.light-theme .text-slate-200,
+html.light-theme .text-slate-300 {
+  color: #1E293B !important;
+}
+
+html.light-theme .text-slate-400,
+html.light-theme .text-slate-500 {
+  color: #475569 !important;
+}
+
+/* KaTeX custom sizing and contrast */
+.katex-display {
+  margin: 0.75em 0 !important;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25em 0;
+}
+.katex {
+  font-size: 1.05em;
+  text-rendering: auto;
+}
+
+/* Print styling for PDF export */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
   }
 }
 
